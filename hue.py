@@ -1,16 +1,18 @@
-ximport requests
+import requests
 import time
 import urllib3
 import math
+import argparse
+import random
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 192.168.1.4/debug/clip.html
 BRIDGE_IP = "192.168.1.4"
 USERNAME = "TGaYkrLuo0zVWNzQVWuj8gJl1-PfvWw84POPJFyi"
 
-def make_request(light_number, hue="0", is_on=True):
+def make_request(light_number, hue="0", brightness="254", is_on=True):
     url = "http://{}/api/{}/lights/{}/state".format(BRIDGE_IP, USERNAME, light_number)
-    body = "{{\"on\":{}, \"sat\":254, \"bri\":254, \"hue\":{}}}".format("true" if is_on else "false", hue)
+    body = "{{\"on\":{}, \"sat\":254, \"bri\":{}, \"hue\":{}}}".format("true" if is_on else "false", brightness, hue)
 
     try:
         r = requests.put(url, data=body, verify=False, timeout=5)
@@ -49,34 +51,46 @@ def offset_blues():
     # return degrees_for_spectrum(300, 330) + degrees_for_spectrum(190, 299) ------- too jarring
     return degrees_for_spectrum(210, 360)
 
+def parse_input_args():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--period', type=float, default=0.5, help='Period between colour change requests')
+    parser.add_argument('-s', '--step', type=int, default=1, help='Steps in degrees that we jump through the hue wheel')
+    parser.add_argument('-c', '--cycle', action='store_true', help='Cycle through entire colour spectrum')
+   # parser.add_argument('-q', '--quiet', action='store_false', help='Disable logging')
+    return parser.parse_args()
+
 def cycle():
 
     sign = 1
-    r = blues()
-    l = greens()
+    args = parse_input_args()
+    period = args.period
+    step = args.step
+    # QUIET=args.quiet
+
+    brightness = random.randrange(180, 254, 5)
+
+    r = degrees_for_spectrum(0, 360, 1) if args.cycle else blues()
+    l = degrees_for_spectrum(0, 360, 1) if args.cycle else reds()
 
     j = -1
     while 1:
-        j+=1
+        if j > 1023:
+            j = 0
+
+        j += 1
+
         print(j)
         sign = -1 if j % 2 == 0 else 1
-        for i in range(1, len(r)):
+        for i in range(1, min(len(r), len(l)) - step):
 
-            if not i < len(r) - 1 or not i < len(l) - 1:
-                break
-
-            # index_3 = i * sign
-            # index_4 = i * sign + 1 if index_3 != 0 else len(r)
- 
-            # hue_3 = r[index_3]
-            # hue_4 = r[index_4]
- 
-            # if index_4 == 0 or index_3 == 0:
-            #     continue
-
+            is_even = True # i % 2 == 0
             index = i * sign
-            hue_3 = r[index + 1]
-            hue_4 = l[index]
+            hue_3 = r[index + step] if is_even else l[index + step]
+            hue_4 = l[index + (step - 2)] if is_even else r[index + (step - 2)]
+
+            if i % 10 == 0:
+                brightness = random.randrange(180, 254, 5)
             
             print("sign: {}".format(sign))
             print("index: {}".format(i))
@@ -85,13 +99,17 @@ def cycle():
             print("light #3 hue: {}".format(hue_3))
             print("light #4 hue: {}".format(hue_4))
 
-            make_request("3", hue_3)
-            time.sleep(0.5)
+            make_request("3", hue_3, brightness)
+            time.sleep(period)
 
-            make_request("4", hue_4)
+            make_request("4", hue_4, brightness)
 
             print("sleep")
-            time.sleep(0.5)
+            time.sleep(period)
+
+
+    print(str)
+
 
 def all_on():
     make_request("3", is_on=True)
